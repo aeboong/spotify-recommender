@@ -1,29 +1,48 @@
 import streamlit as st
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
-import os
+import pandas as pd
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import MinMaxScaler
 
-# Spotify Credentials
-client_id = st.secrets["SPOTIFY_CLIENT_ID"]
-client_secret = st.secrets["SPOTIFY_CLIENT_SECRET"]
+# Spotify authentication
+sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
+    client_id=st.secrets["SPOTIPY_CLIENT_ID"],
+    client_secret=st.secrets["SPOTIPY_CLIENT_SECRET"]
+))
 
-auth_manager = SpotifyClientCredentials(client_id=client_id, client_secret=client_secret)
-sp = spotipy.Spotify(auth_manager=auth_manager)
+st.title("🎧 Spotify Song Recommender")
 
-st.title("🎵 Spotify Song Recommender")
+user_input = st.text_input("Enter a song name:")
+if user_input:
+    results = sp.search(q=user_input, type="track", limit=1)
+    if results["tracks"]["items"]:
+        track = results["tracks"]["items"][0]
+        st.write(f"You selected: {track['name']} by {track['artists'][0]['name']}")
 
-song_input = st.text_input("Enter a song name:")
+        audio_features = sp.audio_features(track['id'])[0]
 
-if song_input:
-    results = sp.search(q=song_input, type="track", limit=1)
-    tracks = results.get('tracks', {}).get('items', [])
-    if tracks:
-        track = tracks[0]
-        song_id = track['id']
-        st.success(f"Found: {track['name']} by {track['artists'][0]['name']}")
-        
-        # Get audio features
-        features = sp.audio_features([song_id])[0]
-        st.write("Audio Features:", features)
+        # Load your dataset
+        df = pd.read_csv("your_dataset.csv")
+        df = df.dropna(subset=["danceability", "energy", "valence", "tempo", "acousticness"])
+
+        # Normalize and compute similarity
+        features = ["danceability", "energy", "valence", "tempo", "acousticness"]
+        df_scaled = MinMaxScaler().fit_transform(df[features])
+        input_vector = MinMaxScaler().fit(df[features]).transform([[
+            audio_features["danceability"],
+            audio_features["energy"],
+            audio_features["valence"],
+            audio_features["tempo"],
+            audio_features["acousticness"]
+        ]])
+
+        df["similarity"] = cosine_similarity(input_vector, df_scaled)[0]
+        recommendations = df.sort_values("similarity", ascending=False).head(5)
+
+        st.subheader("Recommended Songs 🎵")
+        for i, row in recommendations.iterrows():
+            st.write(f"{row['name']} by {row['artists']}")
     else:
-        st.error("No song found.")
+        st.warning("Song not found.")
+
