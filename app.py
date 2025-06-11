@@ -5,12 +5,11 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import os
 
-# Initialize Spotify client with OAuth
-sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
+from spotipy.oauth2 import SpotifyClientCredentials
+
+sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
     client_id=st.secrets["SPOTIPY_CLIENT_ID"],
-    client_secret=st.secrets["SPOTIPY_CLIENT_SECRET"],
-    redirect_uri=st.secrets["SPOTIPY_REDIRECT_URI"],
-    scope="user-read-private"
+    client_secret=st.secrets["SPOTIPY_CLIENT_SECRET"]
 ))
 
 st.title("🎵 Spotify Song Analyzer")
