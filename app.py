@@ -15,7 +15,7 @@ def load_data_from_zip():
     zip_url = "https://github.com/aeboong/spotify-recommender/raw/main/spotifyfeatures.csv.zip"
     response = requests.get(zip_url)
     with zipfile.ZipFile(io.BytesIO(response.content)) as z:
-        with z.open("spotifyfeatures.csv") as f:
+        with z.open("SpotifyFeatures.csv") as f:
             return pd.read_csv(f)
 
 df = load_data_from_zip()
