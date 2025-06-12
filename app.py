@@ -1,55 +1,58 @@
 import streamlit as st
 import pandas as pd
+import zipfile
+import io
+import requests
 from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 
-st.set_page_config(page_title="🎶 CSV-Based Song Recommender")
+st.set_page_config(page_title="Spotify Song Recommender", layout="centered")
+st.title("🎧 Spotify Song Recommender")
 
-st.title("🎧 Local Song Recommender (CSV-based)")
-st.markdown("Get recommendations based on **audio features** like danceability, energy, valence, tempo, and acousticness.")
+# Step 1: Load dataset from zipped CSV on GitHub
+@st.cache_data
+def load_data_from_zip():
+    zip_url = "https://github.com/aeboong/spotify-recommender/raw/main/spotifyfeatures.csv.zip"
+    response = requests.get(zip_url)
+    with zipfile.ZipFile(io.BytesIO(response.content)) as z:
+        with z.open("spotifyfeatures.csv") as f:
+            return pd.read_csv(f)
 
-# File uploader
-uploaded_file = st.file_uploader("Upload your Spotify CSV file (with audio features)", type=["csv"])
+df = load_data_from_zip()
 
-if uploaded_file:
-    df = pd.read_csv(uploaded_file)
+# Step 2: Show song picker
+song_options = df['track_name'] + " - " + df['artist_name']
+selected_song = st.selectbox("Choose a song you like:", song_options)
 
-    # Check if required columns exist
-    required_cols = ['track_name', 'artist_name', 'danceability', 'energy', 'valence', 'tempo', 'acousticness']
-    if all(col in df.columns for col in required_cols):
+# Step 3: Recommend similar songs
+if selected_song:
+    # Find the index of the selected song
+    track, artist = selected_song.split(" - ")
+    song_row = df[(df['track_name'] == track) & (df['artist_name'] == artist)]
 
-        # Normalize feature columns
-        features = ['danceability', 'energy', 'valence', 'tempo', 'acousticness']
-        scaler = MinMaxScaler()
-        scaled_features = scaler.fit_transform(df[features])
-
-        # Compute cosine similarity matrix
-        similarity_matrix = cosine_similarity(scaled_features)
-
-        # Song selector
-        song_list = df['name'].unique()
-        selected_song = st.selectbox("🎵 Choose a song from your dataset:", song_list)
-
-        if selected_song:
-            n = st.slider("How many recommendations?", min_value=1, max_value=10, value=3)
-
-            # Recommendation logic
-            song_idx = df[df['name'] == selected_song].index[0]
-            similarity_scores = list(enumerate(similarity_matrix[song_idx]))
-            ranked = sorted(similarity_scores, key=lambda x: x[1], reverse=True)
-
-            # Filter top similar but not too similar
-            recommendations = []
-            for i, score in ranked:
-                if i != song_idx and score < 0.95:  # Avoid exact or nearly exact matches
-                    recommendations.append(i)
-                if len(recommendations) == n:
-                    break
-
-            st.subheader("🔁 Recommended Songs")
-            st.dataframe(df.iloc[recommendations][['name', 'artists']].reset_index(drop=True))
-
+    if song_row.empty:
+        st.error("Song not found in dataset.")
     else:
-        st.error(f"Your CSV must contain these columns: {', '.join(required_cols)}")
-else:
-    st.info("👈 Please upload a CSV file to begin.")
+        st.success(f"Generating recommendations for: **{track}** by **{artist}**")
+
+        # Select audio features for similarity
+        features = ['danceability', 'energy', 'valence', 'tempo', 'acousticness']
+        X = df[features]
+
+        # Normalize features
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(X)
+
+        # Compute cosine similarity
+        similarity = cosine_similarity(X_scaled)
+
+        # Get recommendations
+        idx = song_row.index[0]
+        similar_indices = similarity[idx].argsort()[::-1][1:6]  # Top 5 (skip self)
+
+        st.subheader("🎯 Recommended Songs:")
+        for i in similar_indices:
+            rec_track = df.iloc[i]['track_name']
+            rec_artist = df.iloc[i]['artist_name']
+            st.write(f"- **{rec_track}** by **{rec_artist}**")
+
