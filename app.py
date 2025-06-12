@@ -1,67 +1,55 @@
 import streamlit as st
-import time
-import spotipy
-from spotipy.oauth2 import SpotifyOAuth
-from spotipy.exceptions import SpotifyException
+import pandas as pd
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import MinMaxScaler
 
-# Safe wrapper to handle rate limiting
-def safe_api_call(api_func, *args, **kwargs):
-    retry_delay = 10  # seconds
-    while True:
-        try:
-            return api_func(*args, **kwargs)
-        except SpotifyException as e:
-            if e.http_status == 429:
-                st.warning("⚠️ Rate limit reached. Waiting to retry...")
-                time.sleep(retry_delay)
-            else:
-                st.error(f"Spotify error: {e}")
-                return None
-        except Exception as e:
-            st.error(f"Unexpected error: {e}")
-            return None
+st.set_page_config(page_title="🎶 CSV-Based Song Recommender")
 
-# Spotify authentication using Streamlit secrets
-sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
-    client_id=st.secrets["SPOTIPY_CLIENT_ID"],
-    client_secret=st.secrets["SPOTIPY_CLIENT_SECRET"],
-    redirect_uri="https://aeboong-spotify-recommender.streamlit.app",
-    scope="user-library-read user-read-private"
-))
+st.title("🎧 Local Song Recommender (CSV-based)")
+st.markdown("Get recommendations based on **audio features** like danceability, energy, valence, tempo, and acousticness.")
 
-# Streamlit UI
-st.title("🎵 Spotify Song Recommender")
+# File uploader
+uploaded_file = st.file_uploader("Upload your Spotify CSV file (with audio features)", type=["csv"])
 
-song_name = st.text_input("Enter a song name:")
+if uploaded_file:
+    df = pd.read_csv(uploaded_file)
 
-if song_name:
-    st.write(f"🔍 Searching for: **{song_name}**")
+    # Check if required columns exist
+    required_cols = ['name', 'artists', 'danceability', 'energy', 'valence', 'tempo', 'acousticness']
+    if all(col in df.columns for col in required_cols):
 
-    # Search for the song
-    results = safe_api_call(sp.search, q=song_name, type='track', limit=1)
+        # Normalize feature columns
+        features = ['danceability', 'energy', 'valence', 'tempo', 'acousticness']
+        scaler = MinMaxScaler()
+        scaled_features = scaler.fit_transform(df[features])
 
-    if results is None:
-        st.error("Search failed. Try again later.")
+        # Compute cosine similarity matrix
+        similarity_matrix = cosine_similarity(scaled_features)
+
+        # Song selector
+        song_list = df['name'].unique()
+        selected_song = st.selectbox("🎵 Choose a song from your dataset:", song_list)
+
+        if selected_song:
+            n = st.slider("How many recommendations?", min_value=1, max_value=10, value=3)
+
+            # Recommendation logic
+            song_idx = df[df['name'] == selected_song].index[0]
+            similarity_scores = list(enumerate(similarity_matrix[song_idx]))
+            ranked = sorted(similarity_scores, key=lambda x: x[1], reverse=True)
+
+            # Filter top similar but not too similar
+            recommendations = []
+            for i, score in ranked:
+                if i != song_idx and score < 0.95:  # Avoid exact or nearly exact matches
+                    recommendations.append(i)
+                if len(recommendations) == n:
+                    break
+
+            st.subheader("🔁 Recommended Songs")
+            st.dataframe(df.iloc[recommendations][['name', 'artists']].reset_index(drop=True))
+
     else:
-        tracks = results.get('tracks', {}).get('items', [])
-
-        if not tracks:
-            st.warning("❌ No matching track found. Try another song.")
-        else:
-            track = tracks[0]
-            track_name = track['name']
-            track_artist = track['artists'][0]['name']
-            track_id = track.get('id')
-
-            st.success(f"✅ Found: **{track_name}** by **{track_artist}**")
-            st.caption(f"Spotify ID: `{track_id}`")
-
-            # Get audio features
-            audio_data = safe_api_call(sp.audio_features, [track_id])
-
-            if audio_data and audio_data[0]:
-                st.subheader("🎧 Audio Features")
-                st.json(audio_data[0])
-            else:
-                st.warning("⚠️ No audio features available for this track.")
-
+        st.error(f"Your CSV must contain these columns: {', '.join(required_cols)}")
+else:
+    st.info("👈 Please upload a CSV file to begin.")
