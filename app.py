@@ -1,11 +1,13 @@
 import streamlit as st
 import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
+from spotipy.oauth2 import SpotifyOAuth
 
-# Spotify API setup
-sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(
+# Spotify authentication using Streamlit secrets
+sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
     client_id=st.secrets["SPOTIPY_CLIENT_ID"],
-    client_secret=st.secrets["SPOTIPY_CLIENT_SECRET"]
+    client_secret=st.secrets["SPOTIPY_CLIENT_SECRET"],
+    redirect_uri="https://aeboong-spotify-recommender.streamlit.app",
+    scope="user-library-read user-read-private"
 ))
 
 st.title("🎵 Spotify Song Analyzer")
