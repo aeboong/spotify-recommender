@@ -15,7 +15,7 @@ if uploaded_file:
     df = pd.read_csv(uploaded_file)
 
     # Check if required columns exist
-    required_cols = ['name', 'artists', 'danceability', 'energy', 'valence', 'tempo', 'acousticness']
+    required_cols = ['track_name', 'artist_name', 'danceability', 'energy', 'valence', 'tempo', 'acousticness']
     if all(col in df.columns for col in required_cols):
 
         # Normalize feature columns
