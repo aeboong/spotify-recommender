@@ -10,7 +10,7 @@ sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
     scope="user-library-read user-read-private"
 ))
 
-st.title("🎵 Spotify Song Analyzer")
+st.title("🎵 Spotify Song Recommender")
 song_name = st.text_input("Enter a song name:")
 
 if song_name:
